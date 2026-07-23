@@ -180,7 +180,7 @@
       </div>
       <div style="flex:2">
         <label for="chatUrlInput">치지직 방송 링크 (선택) — 넣으면 복사할 때 채팅창을 앞으로 띄워줘요</label>
-        <input type="text" id="chatUrlInput" placeholder="https://chzzk.naver.com/live/...">
+        <input type="text" id="chatUrlInput" placeholder="https://chzzk.naver.com/live/..." value="https://chzzk.naver.com/live/01f531c6d0091b9c606bde1c71e2ead4">
         <a id="openChatBtn" class="secondary" target="chatWindow">채팅창 열기 ↗</a>
       </div>
     </div>
@@ -349,11 +349,15 @@ function setStatus(msg, isError) {
 
 // ---- 치지직 채팅 팝업: 방송 링크에서 32자리 hex ID만 추출해 고정 주소의 채팅창 링크를 만든다 ----
 let chatOpened = false;
+function chzzkChatUrl(raw) {
+  const m = (raw || '').match(/chzzk\.naver\.com\/live\/([a-f0-9]{32})/);
+  return m ? 'https://chzzk.naver.com/live/' + m[1] + '/chat' : null;
+}
 function updateChatBtn() {
   const btn = $('openChatBtn');
-  const m = $('chatUrlInput').value.match(/chzzk\.naver\.com\/live\/([a-f0-9]{32})/);
-  if (m) {
-    btn.href = 'https://chzzk.naver.com/live/' + m[1] + '/chat';
+  const chat = chzzkChatUrl($('chatUrlInput').value);
+  if (chat) {
+    btn.href = chat;
     btn.style.display = 'inline-block';
   } else {
     btn.style.display = 'none';
@@ -369,6 +373,11 @@ function focusChatWindow() {
 // ---- 확장프로그램(완전 자동 전송) 연동 ----
 let extReady = false;
 let lastRender = null;
+let pendingResult = null; // 진행 중인 전송의 응답 대기 콜백
+let batchRunning = false;
+let batchAbort = false;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
 window.addEventListener('message', (ev) => {
   if (ev.source !== window) return;
   const d = ev.data;
@@ -378,11 +387,59 @@ window.addEventListener('message', (ev) => {
     $('extState').textContent = '— 설치됨 ✓';
     if (lastRender) renderLinks(lastRender.videoId, lastRender.duration, lastRender.interval);
   }
-  if (d.type === 'result') {
-    setStatus(d.ok ? '채팅창에 전송했습니다 ✓' : '전송 실패: ' + d.error, !d.ok);
+  if (d.type === 'result' && pendingResult) {
+    const resolve = pendingResult;
+    pendingResult = null;
+    resolve({ ok: !!d.ok, error: d.error || '' });
   }
 });
 window.postMessage({ source: 'ytsplit-page', type: 'ping' }, '/');
+
+function sendOne(text) {
+  return new Promise((resolve) => {
+    pendingResult = resolve;
+    window.postMessage({
+      source: 'ytsplit-page',
+      type: 'send',
+      text: text,
+      chatUrl: chzzkChatUrl($('chatUrlInput').value) || ''
+    }, window.location.origin);
+    // 탭 자동 열기까지 포함해 넉넉히 대기
+    setTimeout(() => {
+      if (pendingResult === resolve) {
+        pendingResult = null;
+        resolve({ ok: false, error: '응답 시간 초과 — 확장 상태를 확인해주세요.' });
+      }
+    }, 25000);
+  });
+}
+
+async function sendAll(links, btn) {
+  if (batchRunning) { batchAbort = true; return; }
+  batchRunning = true;
+  batchAbort = false;
+  btn.textContent = '중단';
+  let sent = 0;
+  for (let i = 0; i < links.length; i++) {
+    if (batchAbort) break;
+    setStatus('전송 중 ' + (i + 1) + '/' + links.length + '…');
+    const res = await sendOne(links[i]);
+    if (!res.ok) {
+      setStatus('전송 실패(' + (i + 1) + '번째): ' + res.error, true);
+      batchRunning = false;
+      btn.textContent = '전체 전송⚡';
+      return;
+    }
+    sent++;
+    if (i < links.length - 1 && !batchAbort) {
+      setStatus((i + 1) + '/' + links.length + ' 전송됨 — 채팅 씹힘 방지 5초 대기…');
+      await sleep(5000);
+    }
+  }
+  batchRunning = false;
+  btn.textContent = '전체 전송⚡';
+  setStatus(batchAbort ? ('중단됨 (' + sent + '/' + links.length + ' 전송)') : ('전체 전송 완료 ✓ (' + sent + '개)'));
+}
 
 function renderLinks(videoId, duration, interval) {
   lastRender = { videoId: videoId, duration: duration, interval: interval };
@@ -421,9 +478,11 @@ function renderLinks(videoId, duration, interval) {
       const sendBtn = document.createElement('button');
       sendBtn.className = 'copy-one';
       sendBtn.textContent = '전송⚡';
-      sendBtn.onclick = () => {
+      sendBtn.onclick = async () => {
+        if (batchRunning) return;
         setStatus('채팅창으로 전송 중…');
-        window.postMessage({ source: 'ytsplit-page', type: 'send', text: line }, window.location.origin);
+        const res = await sendOne(line);
+        setStatus(res.ok ? '채팅창에 전송했습니다 ✓' : '전송 실패: ' + res.error, !res.ok);
       };
       item.appendChild(sendBtn);
     }
@@ -432,10 +491,17 @@ function renderLinks(videoId, duration, interval) {
   $('resultMeta').textContent = `총 길이 ${fmtTime(duration)} · ${links.length}개 · ${interval}초 간격`;
   $('results').style.display = 'block';
 
-  $('copyAllBtn').onclick = () => {
-    navigator.clipboard.writeText(links.join('\n'));
-    setStatus('전체 링크를 클립보드에 복사했습니다.');
-  };
+  const allBtn = $('copyAllBtn');
+  if (extReady) {
+    allBtn.textContent = '전체 전송⚡';
+    allBtn.onclick = () => sendAll(links, allBtn);
+  } else {
+    allBtn.textContent = '전체 복사';
+    allBtn.onclick = () => {
+      navigator.clipboard.writeText(links.join('\n'));
+      setStatus('전체 링크를 클립보드에 복사했습니다.');
+    };
+  }
 }
 
 $('goBtn').addEventListener('click', async () => {

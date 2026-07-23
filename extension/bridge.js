@@ -11,7 +11,11 @@ window.addEventListener('message', (ev) => {
   }
 
   if (d.type === 'send' && typeof d.text === 'string') {
-    chrome.runtime.sendMessage({ type: 'send', text: d.text }, (res) => {
+    chrome.runtime.sendMessage({
+      type: 'send',
+      text: d.text,
+      chatUrl: typeof d.chatUrl === 'string' ? d.chatUrl : ''
+    }, (res) => {
       const err = chrome.runtime.lastError;
       window.postMessage({
         source: 'ytsplit-ext',
