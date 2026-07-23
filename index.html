@@ -329,9 +329,27 @@ function focusChatWindow() {
   try { window.open('', 'chatWindow'); } catch (e) {}
 }
 
+// ---- 확장프로그램(완전 자동 전송) 연동 ----
+let extReady = false;
+let lastRender = null;
+window.addEventListener('message', (ev) => {
+  if (ev.source !== window) return;
+  const d = ev.data;
+  if (!d || d.source !== 'ytsplit-ext') return;
+  if (d.type === 'ready' && !extReady) {
+    extReady = true;
+    if (lastRender) renderLinks(lastRender.videoId, lastRender.duration, lastRender.interval);
+  }
+  if (d.type === 'result') {
+    setStatus(d.ok ? '채팅창에 전송했습니다 ✓' : '전송 실패: ' + d.error, !d.ok);
+  }
+});
+window.postMessage({ source: 'ytsplit-page', type: 'ping' }, '/');
+
 function renderLinks(videoId, duration, interval) {
+  lastRender = { videoId: videoId, duration: duration, interval: interval };
   const list = $('linkList');
-  list.innerHTML = '';
+  list.replaceChildren();
   const links = [];
   for (let t = 0; t < duration; t += interval) {
     const url = `https://youtu.be/${videoId}?t=${t}`;
@@ -361,6 +379,16 @@ function renderLinks(videoId, duration, interval) {
     };
 
     item.append(ts, a, btn);
+    if (extReady) {
+      const sendBtn = document.createElement('button');
+      sendBtn.className = 'copy-one';
+      sendBtn.textContent = '전송⚡';
+      sendBtn.onclick = () => {
+        setStatus('채팅창으로 전송 중…');
+        window.postMessage({ source: 'ytsplit-page', type: 'send', text: line }, window.location.origin);
+      };
+      item.appendChild(sendBtn);
+    }
     list.appendChild(item);
   }
   $('resultMeta').textContent = `총 길이 ${fmtTime(duration)} · ${links.length}개 · ${interval}초 간격`;
