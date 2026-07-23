@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>유튜브 타임스탬프 분할기</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #1a1d24;
+    --border: #2a2e38;
+    --text: #e8eaed;
+    --muted: #9aa0a6;
+    --accent: #ff4444;
+    --accent-soft: rgba(255, 68, 68, 0.12);
+    --link: #8ab4f8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 32px 16px;
+  }
+  .container { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; }
+  h1 .accent { color: var(--accent); }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 24px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 12px 14px;
+    font-size: 0.95rem;
+    outline: none;
+  }
+  input:focus { border-color: var(--accent); }
+  .row { display: flex; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 140px; }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 16px;
+    width: 100%;
+  }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: 0.5; cursor: wait; }
+  button.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: auto;
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-top: 0;
+  }
+  #status { margin-top: 12px; font-size: 0.85rem; color: var(--muted); min-height: 1.2em; }
+  #status.error { color: #ff7b72; }
+  #manualBox { display: none; margin-top: 14px; padding: 14px; background: var(--accent-soft); border-radius: 8px; }
+  #manualBox p { font-size: 0.85rem; margin-bottom: 10px; }
+  #results { display: none; }
+  .results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .results-header h2 { font-size: 1.05rem; }
+  .results-header .meta { color: var(--muted); font-size: 0.85rem; }
+  .link-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .link-item:last-child { border-bottom: none; }
+  .timestamp {
+    font-variant-numeric: tabular-nums;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .link-item a {
+    color: var(--link);
+    text-decoration: none;
+    font-size: 0.9rem;
+    word-break: break-all;
+    flex: 1;
+  }
+  .link-item a:hover { text-decoration: underline; }
+  .copy-one {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    margin: 0;
+    width: auto;
+  }
+  .copy-one:hover { color: var(--text); border-color: var(--muted); }
+  #playerHolder { position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; overflow: hidden; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1><span class="accent">▶</span> 유튜브 타임스탬프 분할기</h1>
+  <p class="subtitle">어떤 형태의 유튜브 링크든 붙여넣으면 시작 시간별 링크로 쪼개줍니다. API 키 불필요.</p>
+
+  <div class="card">
+    <label for="urlInput">유튜브 링크 (watch / youtu.be 공유 / shorts / embed 전부 가능)</label>
+    <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=... 또는 https://youtu.be/..." autofocus>
+    <div class="row">
+      <div>
+        <label for="intervalInput">분할 간격 (초)</label>
+        <input type="number" id="intervalInput" value="100" min="1">
+      </div>
+    </div>
+    <div id="manualBox">
+      <p>⚠ 영상 길이를 자동으로 가져오지 못했습니다. 길이를 직접 입력해 주세요.</p>
+      <div class="row" style="margin-top:0">
+        <div>
+          <label for="manualMin">분</label>
+          <input type="number" id="manualMin" min="0" value="0">
+        </div>
+        <div>
+          <label for="manualSec">초</label>
+          <input type="number" id="manualSec" min="0" max="59" value="0">
+        </div>
+      </div>
+    </div>
+    <button id="goBtn">링크 쪼개기</button>
+    <div id="status"></div>
+  </div>
+
+  <div class="card" id="results">
+    <div class="results-header">
+      <h2 id="resultTitle">생성된 링크</h2>
+      <div>
+        <span class="meta" id="resultMeta"></span>
+        <button class="secondary" id="copyAllBtn">전체 복사</button>
+      </div>
+    </div>
+    <div id="linkList"></div>
+  </div>
+</div>
+
+<div id="playerHolder"><div id="ytPlayer"></div></div>
+
+<script>
+// ---- 링크 파싱: 어떤 형태의 유튜브 URL이든 11자리 영상 ID 추출 ----
+function extractVideoId(raw) {
+  raw = raw.trim();
+  // URL 없이 ID만 넣은 경우
+  if (/^[A-Za-z0-9_-]{11}$/.test(raw)) return raw;
+  let url;
+  try {
+    url = new URL(raw.match(/^https?:\/\//) ? raw : 'https://' + raw);
+  } catch (e) { return null; }
+
+  const host = url.hostname.replace(/^www\.|^m\./, '');
+  if (host === 'youtu.be') {
+    const id = url.pathname.split('/')[1] || '';
+    return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+  }
+  if (host === 'youtube.com' || host === 'music.youtube.com' || host === 'youtube-nocookie.com') {
+    // /watch?v=ID
+    const v = url.searchParams.get('v');
+    if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v;
+    // /shorts/ID, /embed/ID, /live/ID, /v/ID
+    const m = url.pathname.match(/^\/(?:shorts|embed|live|v)\/([A-Za-z0-9_-]{11})/);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+function fmtTime(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+    : `${m}:${String(s).padStart(2,'0')}`;
+}
+
+// ---- 영상 길이 자동 조회 (유튜브 공개 iframe 플레이어, API 키 불필요) ----
+let ytApiPromise = null;
+function loadYtApi() {
+  if (ytApiPromise) return ytApiPromise;
+  ytApiPromise = new Promise((resolve, reject) => {
+    if (window.YT && window.YT.Player) return resolve();
+    // 실패 시 ytApiPromise를 비워 다음 시도에서 스크립트 로딩부터 다시 하게 함
+    const fail = (err) => { ytApiPromise = null; reject(err); };
+    window.onYouTubeIframeAPIReady = () => resolve();
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    tag.onerror = () => fail(new Error('iframe api load fail'));
+    document.head.appendChild(tag);
+    setTimeout(() => fail(new Error('iframe api timeout')), 15000);
+  });
+  return ytApiPromise;
+}
+
+let player = null;
+let currentOnError = null; // 시도할 때마다 교체 — 재사용 플레이어에서도 에러 사유가 전달되게 함
+function getDuration(videoId) {
+  return loadYtApi().then(() => new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (fn, val) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      currentOnError = null;
+      try { player.stopVideo(); } catch (e) {}
+      fn(val);
+    };
+    const deadline = setTimeout(() => finish(reject, new Error('duration timeout')), 12000);
+    currentOnError = (e) => {
+      const err = new Error('player error');
+      err.ytCode = e && e.data;
+      finish(reject, err);
+    };
+    const poll = () => {
+      if (settled) return;
+      try {
+        const d = player.getDuration();
+        if (d && d > 0) { finish(resolve, Math.floor(d)); return; }
+      } catch (e) {}
+      setTimeout(poll, 250);
+    };
+    // 큐만 걸면 길이 정보가 안 채워지는 경우가 있어, 음소거 재생으로 메타데이터 로딩을 강제
+    const begin = () => {
+      try { player.mute(); player.loadVideoById(videoId); } catch (e) {}
+      poll();
+    };
+    if (player && player.loadVideoById) { begin(); return; }
+    // 준비가 덜 된 채 남은 플레이어는 버리고 새로 만든다 (이전 시도 실패 잔재 정리)
+    if (player) {
+      try { player.destroy(); } catch (e) {}
+      player = null;
+      document.getElementById('ytPlayer').replaceChildren();
+    }
+    // 더블클릭 실행(file://)에서는 위젯이 자동으로 붙이는 origin 파라미터 때문에
+    // 플레이어와 페이지 간 통신이 끊긴다. origin 없는 iframe을 직접 만들어 붙이면 해결됨.
+    const iframe = document.createElement('iframe');
+    iframe.width = '1';
+    iframe.height = '1';
+    iframe.allow = 'autoplay; encrypted-media';
+    iframe.src = 'https://www.youtube.com/embed/' + encodeURIComponent(videoId) + '?enablejsapi=1&mute=1';
+    document.getElementById('ytPlayer').appendChild(iframe);
+    player = new YT.Player(iframe, {
+      events: {
+        onReady: begin,
+        onError: (e) => { if (currentOnError) currentOnError(e); }
+      }
+    });
+  }));
+}
+
+// ---- 메인 흐름 ----
+const $ = id => document.getElementById(id);
+const statusEl = $('status');
+
+function setStatus(msg, isError) {
+  statusEl.textContent = msg;
+  statusEl.className = isError ? 'error' : '';
+}
+
+function renderLinks(videoId, duration, interval) {
+  const list = $('linkList');
+  list.innerHTML = '';
+  const links = [];
+  for (let t = 0; t < duration; t += interval) {
+    const url = `https://youtu.be/${videoId}?t=${t}`;
+    const line = `!sr ${url}`;
+    links.push(line);
+    const item = document.createElement('div');
+    item.className = 'link-item';
+
+    const ts = document.createElement('span');
+    ts.className = 'timestamp';
+    ts.textContent = fmtTime(t);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = line;
+
+    const btn = document.createElement('button');
+    btn.className = 'copy-one';
+    btn.textContent = '복사';
+    btn.onclick = () => {
+      navigator.clipboard.writeText(line);
+      btn.textContent = '✓';
+      setTimeout(() => btn.textContent = '복사', 1200);
+    };
+
+    item.append(ts, a, btn);
+    list.appendChild(item);
+  }
+  $('resultMeta').textContent = `총 길이 ${fmtTime(duration)} · ${links.length}개 · ${interval}초 간격`;
+  $('results').style.display = 'block';
+
+  $('copyAllBtn').onclick = () => {
+    navigator.clipboard.writeText(links.join('\n'));
+    setStatus('전체 링크를 클립보드에 복사했습니다.');
+  };
+}
+
+$('goBtn').addEventListener('click', async () => {
+  const raw = $('urlInput').value;
+  const interval = parseInt($('intervalInput').value, 10);
+  const videoId = extractVideoId(raw);
+
+  if (!videoId) { setStatus('유튜브 링크를 인식하지 못했습니다. 링크를 확인해 주세요.', true); return; }
+  if (!interval || interval < 1) { setStatus('분할 간격은 1초 이상이어야 합니다.', true); return; }
+
+  // 수동 입력 박스가 열려 있고 값이 있으면 그 값 사용
+  const manualBox = $('manualBox');
+  if (manualBox.style.display === 'block') {
+    const manual = (parseInt($('manualMin').value, 10) || 0) * 60 + (parseInt($('manualSec').value, 10) || 0);
+    if (manual > 0) { setStatus(''); renderLinks(videoId, manual, interval); return; }
+  }
+
+  const btn = $('goBtn');
+  btn.disabled = true;
+  setStatus('영상 길이를 가져오는 중…');
+  try {
+    const duration = await getDuration(videoId);
+    manualBox.style.display = 'none';
+    setStatus('');
+    renderLinks(videoId, duration, interval);
+  } catch (e) {
+    manualBox.style.display = 'block';
+    const code = e && e.ytCode;
+    const msg = (e && e.message) || '';
+    if (code === 153) {
+      setStatus('파일을 직접 연 환경(더블클릭)에서는 유튜브가 자동 조회를 차단합니다(오류 153). 아래에 길이를 직접 입력해 주세요.', true);
+    } else if (code === 101 || code === 150) {
+      setStatus('이 영상은 소유자가 외부 재생(퍼가기)을 막아 자동 조회가 불가능합니다. 길이를 직접 입력해 주세요.', true);
+    } else if (code === 100) {
+      setStatus('영상을 찾을 수 없습니다(삭제되었거나 비공개). 링크를 확인해 주세요.', true);
+    } else if (msg.indexOf('iframe api') !== -1) {
+      setStatus('유튜브 스크립트를 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.', true);
+    } else if (msg.indexOf('timeout') !== -1) {
+      setStatus('유튜브 플레이어가 응답하지 않았습니다(시간 초과). 잠시 후 재시도하거나 길이를 직접 입력해 주세요.', true);
+    } else {
+      setStatus('길이 자동 조회 실패 — 다시 시도하거나, 아래에 영상 길이를 직접 입력해 주세요.', true);
+    }
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('goBtn').click(); });
+
+// 파일을 직접 연 경우(더블클릭) 유튜브가 Referer 없는 요청을 거부해 자동 조회가 안 됨 — 미리 안내
+if (location.protocol === 'file:') {
+  setStatus('참고: 파일을 직접 연 환경에서는 유튜브 정책 때문에 길이 자동 조회가 차단될 수 있습니다. 실패하면 길이를 직접 입력해 주세요.');
+}
+</script>
+</body>
+</html>
