@@ -138,6 +138,30 @@
     width: fit-content;
   }
   a.secondary:hover { border-color: var(--muted); }
+  .ext-title { font-size: 1.05rem; margin-bottom: 8px; }
+  .ext-title span { font-size: 0.85rem; font-weight: 400; color: #7ee787; }
+  .ext-desc { font-size: 0.9rem; color: var(--muted); margin-bottom: 14px; }
+  .dl-btn {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .dl-btn:hover { filter: brightness(1.1); }
+  .steps { margin: 16px 0 0 20px; font-size: 0.9rem; }
+  .steps li { margin-bottom: 8px; }
+  .steps code {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.85rem;
+  }
+  .ext-note { font-size: 0.82rem; color: var(--muted); margin-top: 12px; }
   #playerHolder { position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; overflow: hidden; }
 </style>
 </head>
@@ -186,6 +210,19 @@
       </div>
     </div>
     <div id="linkList"></div>
+  </div>
+
+  <div class="card">
+    <h2 class="ext-title">치지직 완전 자동 전송 <span id="extState"></span></h2>
+    <p class="ext-desc">크롬 확장을 설치하면 링크마다 <b>전송⚡</b> 버튼이 생겨, 클릭 한 번으로 치지직 채팅에 명령어가 자동 입력·전송됩니다. 설치하지 않아도 복사 방식은 그대로 쓸 수 있어요.</p>
+    <a class="dl-btn" href="https://srsplitter.github.io/yt-splitter/extension.zip">확장 프로그램 다운하기 ⬇</a>
+    <ol class="steps">
+      <li>위 버튼으로 받은 <b>extension.zip</b>의 압축을 풀어주세요.</li>
+      <li>크롬 주소창에 <code>chrome://extensions</code> 입력 → 우측 상단 <b>개발자 모드</b> 켜기.</li>
+      <li><b>"압축해제된 확장 프로그램을 로드합니다"</b> 클릭 → 압축 푼 <b>extension</b> 폴더 선택.</li>
+      <li>이 페이지를 새로고침하면 전송⚡ 버튼이 나타납니다.</li>
+    </ol>
+    <p class="ext-note">※ 크롬에 네이버 로그인이 되어 있고, 치지직 방송 탭(또는 "채팅창 열기"로 띄운 팝업)이 열려 있어야 전송됩니다.</p>
   </div>
 </div>
 
@@ -338,6 +375,7 @@ window.addEventListener('message', (ev) => {
   if (!d || d.source !== 'ytsplit-ext') return;
   if (d.type === 'ready' && !extReady) {
     extReady = true;
+    $('extState').textContent = '— 설치됨 ✓';
     if (lastRender) renderLinks(lastRender.videoId, lastRender.duration, lastRender.interval);
   }
   if (d.type === 'result') {
