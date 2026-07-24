@@ -162,6 +162,23 @@
     font-size: 0.85rem;
   }
   .ext-note { font-size: 0.82rem; color: var(--muted); margin-top: 12px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tab {
+    width: auto;
+    margin-top: 0;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 10px 20px;
+    font-weight: 500;
+  }
+  .tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  #bgmState { font-size: 0.85rem; font-weight: 400; color: #7ee787; }
   #playerHolder { position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; overflow: hidden; }
 </style>
 </head>
@@ -170,6 +187,12 @@
   <h1><span class="accent">▶</span> 유튜브 타임스탬프 분할기</h1>
   <p class="subtitle">어떤 형태의 유튜브 링크든 붙여넣으면 시작 시간별 링크로 쪼개줍니다. API 키 불필요.</p>
 
+  <div class="tabs">
+    <button class="tab active" id="tabSplitBtn">링크 분할</button>
+    <button class="tab" id="tabBgmBtn">입장 BGM</button>
+  </div>
+
+  <div id="tabSplit">
   <div class="card">
     <label for="urlInput">유튜브 링크 (watch / youtu.be 공유 / shorts / embed 전부 가능)</label>
     <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=... 또는 https://youtu.be/..." autofocus>
@@ -210,6 +233,29 @@
       </div>
     </div>
     <div id="linkList"></div>
+  </div>
+  </div>
+
+  <div id="tabBgm" style="display:none">
+    <div class="card">
+      <h2 class="ext-title">입장 BGM <span id="bgmState"></span></h2>
+      <p class="ext-desc">한국 시간 자정(00:00) 기준으로, 하루 중 치지직 채팅에 <b>처음으로 직접 채팅을 입력</b>하면 저장해둔 노래 명령어가 2초 뒤 자동 전송됩니다. 설정은 이 브라우저(확장)에 저장되는 개인 설정이에요.</p>
+      <p class="ext-note" id="bgmNeedExt" style="display:none">⚠ 이 기능은 하단의 확장 프로그램을 설치해야 사용할 수 있어요. 설치 후 페이지를 새로고침해 주세요.</p>
+      <label for="bgmUrlInput">유튜브 링크</label>
+      <input type="text" id="bgmUrlInput" placeholder="https://youtu.be/... 또는 https://www.youtube.com/watch?v=...">
+      <div class="row">
+        <div>
+          <label for="bgmStartInput">시작 시간 (초)</label>
+          <input type="number" id="bgmStartInput" value="0" min="0">
+        </div>
+      </div>
+      <p class="ext-note" id="bgmPreview"></p>
+      <button id="bgmSaveBtn">입장 BGM 저장</button>
+      <div class="row">
+        <div><button class="secondary" id="bgmClearBtn">저장된 BGM 삭제</button></div>
+      </div>
+      <div id="bgmInfo" class="ext-note"></div>
+    </div>
   </div>
 
   <div class="card">
@@ -385,12 +431,19 @@ window.addEventListener('message', (ev) => {
   if (d.type === 'ready' && !extReady) {
     extReady = true;
     $('extState').textContent = '— 설치됨 ✓';
+    $('bgmNeedExt').style.display = 'none';
+    refreshBgmInfo();
     if (lastRender) renderLinks(lastRender.videoId, lastRender.duration, lastRender.interval);
   }
   if (d.type === 'result' && pendingResult) {
     const resolve = pendingResult;
     pendingResult = null;
     resolve({ ok: !!d.ok, error: d.error || '' });
+  }
+  if (d.type === 'bgm-result' && pendingBgm) {
+    const resolve = pendingBgm;
+    pendingBgm = null;
+    resolve(d);
   }
 });
 window.postMessage({ source: 'ytsplit-page', type: 'ping' }, '/');
@@ -554,6 +607,73 @@ $('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('goBtn
 $('chatUrlInput').addEventListener('input', updateChatBtn);
 $('openChatBtn').addEventListener('click', () => { chatOpened = true; });
 updateChatBtn();
+
+// ---- 탭 전환 ----
+function showTab(which) {
+  $('tabSplit').style.display = which === 'split' ? 'block' : 'none';
+  $('tabBgm').style.display = which === 'bgm' ? 'block' : 'none';
+  $('tabSplitBtn').classList.toggle('active', which === 'split');
+  $('tabBgmBtn').classList.toggle('active', which === 'bgm');
+}
+$('tabSplitBtn').onclick = () => showTab('split');
+$('tabBgmBtn').onclick = () => showTab('bgm');
+
+// ---- 입장 BGM (설정은 확장 저장소에 보관) ----
+let pendingBgm = null;
+function bgmRequest(type, text) {
+  return new Promise((resolve) => {
+    pendingBgm = resolve;
+    window.postMessage({ source: 'ytsplit-page', type: type, text: text || '' }, window.location.origin);
+    setTimeout(() => {
+      if (pendingBgm === resolve) { pendingBgm = null; resolve({ ok: false, error: '확장이 응답하지 않아요.' }); }
+    }, 5000);
+  });
+}
+
+function bgmCommand() {
+  const id = extractVideoId($('bgmUrlInput').value);
+  if (!id) return null;
+  const t = Math.max(0, parseInt($('bgmStartInput').value, 10) || 0);
+  return '!sr https://youtu.be/' + id + '?t=' + t;
+}
+function updateBgmPreview() {
+  const c = bgmCommand();
+  $('bgmPreview').textContent = c ? '전송될 명령어: ' + c : '';
+}
+$('bgmUrlInput').addEventListener('input', updateBgmPreview);
+$('bgmStartInput').addEventListener('input', updateBgmPreview);
+
+async function refreshBgmInfo() {
+  if (!extReady) return;
+  const res = await bgmRequest('bgm-get');
+  if (!res.ok) { $('bgmInfo').textContent = 'BGM 정보를 불러오지 못했어요: ' + res.error; return; }
+  if (res.text) {
+    $('bgmState').textContent = '— 설정됨 ✓';
+    $('bgmInfo').textContent = '저장된 명령어: ' + res.text + (res.date === res.today ? '  ·  오늘은 이미 전송됐어요.' : '  ·  오늘 첫 직접 채팅을 기다리는 중.');
+  } else {
+    $('bgmState').textContent = '';
+    $('bgmInfo').textContent = '저장된 입장 BGM이 없습니다.';
+  }
+}
+
+$('bgmSaveBtn').onclick = async () => {
+  if (!extReady) { $('bgmInfo').textContent = '확장 프로그램을 설치해야 저장할 수 있어요.'; return; }
+  const c = bgmCommand();
+  if (!c) { $('bgmInfo').textContent = '유튜브 링크를 인식하지 못했어요. 링크를 확인해 주세요.'; return; }
+  const res = await bgmRequest('bgm-save', c);
+  if (res.ok) refreshBgmInfo();
+  else $('bgmInfo').textContent = '저장 실패: ' + res.error;
+};
+
+$('bgmClearBtn').onclick = async () => {
+  if (!extReady) { $('bgmInfo').textContent = '확장 프로그램이 설치되어 있지 않아요.'; return; }
+  const res = await bgmRequest('bgm-clear');
+  if (res.ok) refreshBgmInfo();
+  else $('bgmInfo').textContent = '삭제 실패: ' + res.error;
+};
+
+// 확장이 1.5초 안에 인사하지 않으면 설치 안내 표시
+setTimeout(() => { if (!extReady) $('bgmNeedExt').style.display = 'block'; }, 1500);
 
 // 파일을 직접 연 경우(더블클릭) 유튜브가 Referer 없는 요청을 거부해 자동 조회가 안 됨 — 미리 안내
 if (location.protocol === 'file:') {

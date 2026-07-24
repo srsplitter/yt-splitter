@@ -19,8 +19,37 @@ function trySend(tabId, text, attempts, done) {
   });
 }
 
+// 저장 가능한 BGM 명령어도 노래신청 형식만 허용
+const SAFE_TEXT_RE = /^!sr https:\/\/youtu\.be\/[A-Za-z0-9_-]{11}\?t=\d{1,6}$/;
+
+// 한국시간(KST, UTC+9) 기준 날짜 문자열
+function kstDate() {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (!msg || msg.type !== 'send') return;
+  if (!msg) return;
+
+  if (msg.type === 'bgm-save') {
+    if (typeof msg.text !== 'string' || !SAFE_TEXT_RE.test(msg.text)) {
+      sendResponse({ ok: false, error: '허용되지 않는 명령어 형식이에요.' });
+      return;
+    }
+    chrome.storage.local.set({ bgmText: msg.text }, () => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg.type === 'bgm-get') {
+    chrome.storage.local.get(['bgmText', 'bgmDate'], (v) => {
+      sendResponse({ ok: true, text: v.bgmText || '', date: v.bgmDate || '', today: kstDate() });
+    });
+    return true;
+  }
+  if (msg.type === 'bgm-clear') {
+    chrome.storage.local.remove(['bgmText', 'bgmDate'], () => sendResponse({ ok: true }));
+    return true;
+  }
+
+  if (msg.type !== 'send') return;
 
   chrome.tabs.query({ url: 'https://chzzk.naver.com/live/*' }, (tabs) => {
     if (tabs && tabs.length > 0) {

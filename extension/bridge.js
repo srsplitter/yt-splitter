@@ -26,6 +26,20 @@ window.addEventListener('message', (ev) => {
       }, '*');
     });
   }
+
+  // 입장 BGM 설정 저장/조회/삭제 중계
+  if (d.type === 'bgm-save' || d.type === 'bgm-get' || d.type === 'bgm-clear') {
+    chrome.runtime.sendMessage({ type: d.type, text: typeof d.text === 'string' ? d.text : '' }, (res) => {
+      const err = chrome.runtime.lastError;
+      window.postMessage(Object.assign({
+        source: 'ytsplit-ext',
+        type: 'bgm-result',
+        op: d.type,
+        ok: false,
+        error: err ? '확장과 연결에 실패했어요.' : '응답 없음'
+      }, res || {}), '*');
+    });
+  }
 });
 
 // 설치되어 있음을 페이지에 알림
