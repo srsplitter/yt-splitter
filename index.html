@@ -6,14 +6,14 @@
 <title>유튜브 타임스탬프 분할기</title>
 <style>
   :root {
-    --bg: #0f1115;
-    --card: #1a1d24;
-    --border: #2a2e38;
-    --text: #e8eaed;
-    --muted: #9aa0a6;
-    --accent: #ff4444;
-    --accent-soft: rgba(255, 68, 68, 0.12);
-    --link: #8ab4f8;
+    --bg: #000000;
+    --card: #1b1b1b;
+    --border: #303030;
+    --text: #ffffff;
+    --muted: #969696;
+    --accent: #ff9000;
+    --accent-soft: rgba(255, 144, 0, 0.14);
+    --link: #ffb347;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -26,6 +26,13 @@
   .container { max-width: 720px; margin: 0 auto; }
   h1 { font-size: 1.5rem; margin-bottom: 4px; }
   h1 .accent { color: var(--accent); }
+  h1 .logo-box {
+    background: var(--accent);
+    color: #000;
+    border-radius: 6px;
+    padding: 1px 8px;
+    display: inline-block;
+  }
   .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 24px; }
   .card {
     background: var(--card);
@@ -50,7 +57,7 @@
   .row > div { flex: 1; min-width: 140px; }
   button {
     background: var(--accent);
-    color: #fff;
+    color: #000;
     border: none;
     border-radius: 8px;
     padding: 12px 20px;
@@ -144,7 +151,7 @@
   .dl-btn {
     display: inline-block;
     background: var(--accent);
-    color: #fff;
+    color: #000;
     border-radius: 8px;
     padding: 12px 20px;
     font-size: 0.95rem;
@@ -175,7 +182,7 @@
   .tab.active {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: #000;
     font-weight: 600;
   }
   #bgmState { font-size: 0.85rem; font-weight: 400; color: #7ee787; }
@@ -201,7 +208,7 @@
 </head>
 <body>
 <div class="container">
-  <h1><span class="accent">▶</span> 유튜브 타임스탬프 분할기</h1>
+  <h1>유튜브 타임스탬프 <span class="logo-box">분할기</span></h1>
   <p class="subtitle">어떤 형태의 유튜브 링크든 붙여넣으면 시작 시간별 링크로 쪼개줍니다. API 키 불필요.</p>
 
   <div class="tabs">
