@@ -27,6 +27,20 @@ window.addEventListener('message', (ev) => {
     });
   }
 
+  // 유튜브 검색 중계
+  if (d.type === 'yt-search') {
+    chrome.runtime.sendMessage({ type: 'yt-search', query: typeof d.query === 'string' ? d.query : '' }, (res) => {
+      const err = chrome.runtime.lastError;
+      window.postMessage(Object.assign({
+        source: 'ytsplit-ext',
+        type: 'search-result',
+        ok: false,
+        error: err ? '확장과 연결에 실패했어요.' : '응답 없음'
+      }, res || {}), '*');
+    });
+    return;
+  }
+
   // 입장 BGM 설정 저장/조회/삭제 중계
   if (d.type === 'bgm-save' || d.type === 'bgm-get' || d.type === 'bgm-clear') {
     chrome.runtime.sendMessage({ type: d.type, text: typeof d.text === 'string' ? d.text : '' }, (res) => {

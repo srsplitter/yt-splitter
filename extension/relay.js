@@ -27,6 +27,47 @@ function kstDate() {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+// ---- 유튜브 검색 결과 파싱 (검색 페이지의 ytInitialData JSON에서 상위 3개 추출) ----
+function parseDuration(t) {
+  if (!t) return 0;
+  const parts = t.split(':').map(n => parseInt(n, 10));
+  if (parts.some(isNaN)) return 0;
+  return parts.reduce((acc, n) => acc * 60 + n, 0);
+}
+
+function extractResults(html) {
+  const marker = 'var ytInitialData = ';
+  const start = html.indexOf(marker);
+  if (start === -1) return { ok: false, error: '검색 결과를 읽지 못했어요.' };
+  const jsonStart = start + marker.length;
+  const end = html.indexOf(';</script>', jsonStart);
+  if (end === -1) return { ok: false, error: '검색 결과 형식이 예상과 달라요.' };
+  let data;
+  try { data = JSON.parse(html.slice(jsonStart, end)); } catch (e) { return { ok: false, error: '검색 결과 해석 실패' }; }
+  const items = [];
+  try {
+    const sections = data.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents;
+    for (const sec of sections) {
+      const list = sec.itemSectionRenderer && sec.itemSectionRenderer.contents;
+      if (!list) continue;
+      for (const it of list) {
+        const v = it.videoRenderer;
+        if (!v || !v.videoId || !/^[A-Za-z0-9_-]{11}$/.test(v.videoId)) continue;
+        items.push({
+          videoId: v.videoId,
+          title: (v.title && v.title.runs && v.title.runs[0] && v.title.runs[0].text) || '(제목 없음)',
+          channel: (v.ownerText && v.ownerText.runs && v.ownerText.runs[0] && v.ownerText.runs[0].text) || '',
+          durationText: (v.lengthText && v.lengthText.simpleText) || '',
+          seconds: parseDuration(v.lengthText && v.lengthText.simpleText)
+        });
+        if (items.length >= 3) return { ok: true, items: items };
+      }
+    }
+  } catch (e) { return { ok: false, error: '검색 결과 구조가 바뀐 것 같아요.' }; }
+  if (items.length === 0) return { ok: false, error: '검색 결과가 없어요.' };
+  return { ok: true, items: items };
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg) return;
 
@@ -49,6 +90,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === 'yt-search') {
+    // 검색어 검증: 문자·숫자·공백·일반 문장부호만 허용, 100자 제한. 도메인은 youtube.com 고정.
+    const q = String(msg.query || '').replace(/[^\p{L}\p{N}\s\-_.,!?'"()#&]/gu, '').trim().slice(0, 100);
+    if (!q) { sendResponse({ ok: false, error: '검색어가 비어 있어요.' }); return; }
+    const u = new URL('https://www.youtube.com/results');
+    u.searchParams.set('search_query', q);
+    if (u.hostname !== 'www.youtube.com' || u.protocol !== 'https:') {
+      sendResponse({ ok: false, error: '잘못된 요청이에요.' });
+      return;
+    }
+    fetch(u)
+      .then(r => r.text())
+      .then(html => sendResponse(extractResults(html)))
+      .catch(e => sendResponse({ ok: false, error: '유튜브 접속 실패: ' + e.message }));
+    return true;
+  }
   if (msg.type !== 'send') return;
 
   chrome.tabs.query({ url: 'https://chzzk.naver.com/live/*' }, (tabs) => {
