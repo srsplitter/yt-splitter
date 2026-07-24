@@ -1,3 +1,6 @@
+(() => {
+if (window.__ytsplitChatLoaded) return;
+window.__ytsplitChatLoaded = true;
 // 치지직 페이지에서 실행: 채팅 입력창을 찾아 명령어를 넣고 전송한다.
 // + 입장 BGM: 한국시간 자정 기준 오늘 첫 "직접" 채팅을 감지하면 저장된 명령어를 자동 전송.
 
@@ -111,3 +114,5 @@ document.addEventListener('click', (e) => {
   if (!el || readText(el).trim() === '') return;
   onUserChatted();
 }, true);
+
+})();

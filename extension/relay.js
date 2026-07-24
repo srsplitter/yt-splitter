@@ -4,15 +4,23 @@
 // 자동으로 열 수 있는 주소는 치지직 채팅 팝업 형식만 허용
 const CHAT_URL_RE = /^https:\/\/chzzk\.naver\.com\/live\/[a-f0-9]{32}\/chat$/;
 
-// 콘텐츠 스크립트가 아직 준비 전이면 잠시 간격을 두고 재시도한다
-function trySend(tabId, text, attempts, done) {
+// 콘텐츠 스크립트가 준비 전이거나 확장 업데이트로 끊긴 탭이면
+// chat.js를 다시 주입한 뒤 재시도한다 (탭 새로고침 불필요)
+function trySend(tabId, text, attempts, done, injected) {
   chrome.tabs.sendMessage(tabId, { type: 'insert', text: text }, (res) => {
     if (chrome.runtime.lastError || !res) {
+      if (!injected) {
+        chrome.scripting.executeScript({ target: { tabId: tabId }, files: ['chat.js'] }, () => {
+          void chrome.runtime.lastError; // 주입 실패해도 아래 재시도가 최종 판정
+          setTimeout(() => trySend(tabId, text, attempts, done, true), 500);
+        });
+        return;
+      }
       if (attempts <= 0) {
         done({ ok: false, error: '치지직 탭이 응답하지 않아요. 탭을 새로고침한 뒤 다시 시도해주세요.' });
         return;
       }
-      setTimeout(() => trySend(tabId, text, attempts - 1, done), 700);
+      setTimeout(() => trySend(tabId, text, attempts - 1, done, true), 700);
       return;
     }
     done(res);
