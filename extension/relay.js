@@ -1,6 +1,18 @@
 // 서비스 워커: 분할기 페이지의 전송 요청을 열려 있는 치지직 탭으로 중계한다.
 // 치지직 탭이 없으면 채팅 팝업 탭을 직접 열고 나서 전송한다.
 
+// 설치·업데이트 직후, 이미 열려 있는 치지직 탭에도 감지 코드를 바로 심는다
+// (이걸 안 하면 사용자가 탭을 새로고침하기 전까지 입장 BGM 감지가 죽어 있음)
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.tabs.query({ url: ['https://chzzk.naver.com/*', 'https://studio.chzzk.naver.com/*'] }, (tabs) => {
+    (tabs || []).forEach((t) => {
+      chrome.scripting.executeScript({ target: { tabId: t.id }, files: ['chat.js'] }, () => {
+        void chrome.runtime.lastError;
+      });
+    });
+  });
+});
+
 // 자동으로 열 수 있는 주소는 치지직 채팅 팝업 형식만 허용
 const CHAT_URL_RE = /^https:\/\/chzzk\.naver\.com\/live\/[a-f0-9]{32}\/chat$/;
 
