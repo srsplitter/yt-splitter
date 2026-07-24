@@ -229,6 +229,10 @@
     <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=... 또는 https://youtu.be/..." autofocus>
     <div class="row">
       <div>
+        <label for="startInput">자르기 시작 (분:초)</label>
+        <input type="text" id="startInput" value="0:00" placeholder="예: 2:12">
+      </div>
+      <div>
         <label for="intervalInput">분할 간격 (초)</label>
         <input type="number" id="intervalInput" value="100" min="1">
       </div>
@@ -330,6 +334,16 @@ function extractVideoId(raw) {
     if (m) return m[1];
   }
   return null;
+}
+
+// "2:12" / "1:02:12" / "132" 형식을 초로 변환. 잘못된 형식이면 null
+function parseStartTime(raw) {
+  const s = (raw || '').trim();
+  if (!s) return 0;
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  const m = s.match(/^(?:(\d+):)?(\d{1,2}):(\d{1,2})$/);
+  if (!m) return null;
+  return parseInt(m[1] || '0', 10) * 3600 + parseInt(m[2], 10) * 60 + parseInt(m[3], 10);
 }
 
 function fmtTime(sec) {
@@ -464,7 +478,7 @@ window.addEventListener('message', (ev) => {
     $('extState').textContent = '— 설치됨 ✓';
     $('bgmNeedExt').style.display = 'none';
     refreshBgmInfo();
-    if (lastRender) renderLinks(lastRender.videoId, lastRender.duration, lastRender.interval);
+    if (lastRender) renderLinks(lastRender.videoId, lastRender.duration, lastRender.interval, lastRender.startSec);
   }
   if (d.type === 'result' && pendingResult) {
     const resolve = pendingResult;
@@ -530,12 +544,15 @@ async function sendAll(links, btn) {
   setStatus(batchAbort ? ('중단됨 (' + sent + '/' + links.length + ' 전송)') : ('전체 전송 완료 ✓ (' + sent + '개)'));
 }
 
-function renderLinks(videoId, duration, interval) {
-  lastRender = { videoId: videoId, duration: duration, interval: interval };
+const MAX_LINKS = 3; // 명령어는 최대 3개(기본 300초 분량)까지만 생성
+
+function renderLinks(videoId, duration, interval, startSec) {
+  startSec = Math.max(0, startSec || 0);
+  lastRender = { videoId: videoId, duration: duration, interval: interval, startSec: startSec };
   const list = $('linkList');
   list.replaceChildren();
   const links = [];
-  for (let t = 0; t < duration; t += interval) {
+  for (let t = startSec; t < duration && links.length < MAX_LINKS; t += interval) {
     const url = `https://youtu.be/${videoId}?t=${t}`;
     const line = `!sr ${url}`;
     links.push(line);
@@ -577,7 +594,12 @@ function renderLinks(videoId, duration, interval) {
     }
     list.appendChild(item);
   }
-  $('resultMeta').textContent = `총 길이 ${fmtTime(duration)} · ${links.length}개 · ${interval}초 간격`;
+  if (links.length === 0) {
+    $('results').style.display = 'none';
+    setStatus('자르기 시작 시간(' + fmtTime(startSec) + ')이 영상 길이(' + fmtTime(duration) + ')보다 늦어요.', true);
+    return;
+  }
+  $('resultMeta').textContent = `총 길이 ${fmtTime(duration)} · ${fmtTime(startSec)}부터 · ${links.length}개 · ${interval}초 간격`;
   $('results').style.display = 'block';
 
   const allBtn = $('copyAllBtn');
@@ -600,12 +622,14 @@ $('goBtn').addEventListener('click', async () => {
 
   if (!videoId) { setStatus('유튜브 링크를 인식하지 못했습니다. 링크를 확인해 주세요.', true); return; }
   if (!interval || interval < 1) { setStatus('분할 간격은 1초 이상이어야 합니다.', true); return; }
+  const startSec = parseStartTime($('startInput').value);
+  if (startSec === null) { setStatus('자르기 시작 시간 형식이 잘못됐어요. 예: 2:12 또는 132', true); return; }
 
   // 수동 입력 박스가 열려 있고 값이 있으면 그 값 사용
   const manualBox = $('manualBox');
   if (manualBox.style.display === 'block') {
     const manual = (parseInt($('manualMin').value, 10) || 0) * 60 + (parseInt($('manualSec').value, 10) || 0);
-    if (manual > 0) { setStatus(''); renderLinks(videoId, manual, interval); return; }
+    if (manual > 0) { setStatus(''); renderLinks(videoId, manual, interval, startSec); return; }
   }
 
   const btn = $('goBtn');
@@ -615,7 +639,7 @@ $('goBtn').addEventListener('click', async () => {
     const duration = await getDuration(videoId);
     manualBox.style.display = 'none';
     setStatus('');
-    renderLinks(videoId, duration, interval);
+    renderLinks(videoId, duration, interval, startSec);
   } catch (e) {
     manualBox.style.display = 'block';
     const code = e && e.ytCode;
@@ -746,8 +770,10 @@ function renderSearchResults(items) {
     card.onclick = () => {
       $('urlInput').value = 'https://youtu.be/' + r.videoId;
       const interval = parseInt($('intervalInput').value, 10) || 100;
+      const startSec = parseStartTime($('startInput').value);
+      if (startSec === null) { setStatus('자르기 시작 시간 형식이 잘못됐어요. 예: 2:12 또는 132', true); return; }
       const secs = Math.floor(r.seconds || 0);
-      if (secs > 0) { setStatus(''); renderLinks(r.videoId, secs, interval); }
+      if (secs > 0) { setStatus(''); renderLinks(r.videoId, secs, interval, startSec); }
       else $('goBtn').click();
     };
     box.appendChild(card);
