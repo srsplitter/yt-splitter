@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "유튜브 분할기 - 치지직 자동 전송",
-  "version": "1.4",
+  "version": "1.5",
   "description": "yt-splitter 페이지의 전송 버튼을 누르면 열려 있는 치지직 방송 채팅에 명령어를 자동 입력하고 전송합니다.",
   "background": { "service_worker": "relay.js" },
   "content_scripts": [

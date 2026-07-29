@@ -4,6 +4,12 @@ window.__ytsplitChatLoaded = true;
 // 치지직 페이지에서 실행: 채팅 입력창을 찾아 명령어를 넣고 전송한다.
 // + 입장 BGM: 한국시간 자정 기준 오늘 첫 "직접" 채팅을 감지하면 저장된 명령어를 자동 전송.
 
+// 이 시스템이 작동해야 하는 유일한 방송 채널 (다른 방송에서는 감지·전송 모두 하지 않음)
+const ALLOWED_CHANNEL = '01f531c6d0091b9c606bde1c71e2ead4';
+function isAllowedPage() {
+  return location.href.indexOf(ALLOWED_CHANNEL) !== -1;
+}
+
 // 이 확장이 보낼 수 있는 메시지는 노래신청 명령어 형식뿐 (임의 텍스트 전송 차단)
 const SAFE_TEXT = /^!sr https:\/\/youtu\.be\/[A-Za-z0-9_-]{11}\?t=\d{1,6}$/;
 
@@ -36,6 +42,10 @@ function clickSendButton() {
 
 // 형식 검증을 통과한 평문을 입력창에 넣고 전송까지 시도한다
 function doInsertSend(text, done) {
+  if (!isAllowedPage()) {
+    done({ ok: false, error: '이 확장은 지정된 방송에서만 전송할 수 있어요.' });
+    return;
+  }
   if (typeof text !== 'string' || !SAFE_TEXT.test(text)) {
     done({ ok: false, error: '허용되지 않는 메시지 형식이에요.' });
     return;
@@ -87,6 +97,7 @@ function isChatInputEl(el) {
 }
 
 function onUserChatted() {
+  if (!isAllowedPage()) return; // 지정된 방송이 아니면 입장 BGM 감지 안 함
   chrome.storage.local.get(['bgmText', 'bgmDate'], (v) => {
     if (!v.bgmText || !SAFE_TEXT.test(v.bgmText)) return;
     const today = kstDate();

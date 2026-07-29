@@ -13,8 +13,10 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-// 자동으로 열 수 있는 주소는 치지직 채팅 팝업 형식만 허용
-const CHAT_URL_RE = /^https:\/\/chzzk\.naver\.com\/live\/[a-f0-9]{32}\/chat$/;
+// 이 시스템이 작동해야 하는 유일한 방송 채널
+const ALLOWED_CHANNEL = '01f531c6d0091b9c606bde1c71e2ead4';
+// 자동으로 열 수 있는 주소는 지정된 채널의 채팅 팝업만 허용
+const CHAT_URL_RE = /^https:\/\/chzzk\.naver\.com\/live\/01f531c6d0091b9c606bde1c71e2ead4\/chat$/;
 
 // 콘텐츠 스크립트가 준비 전이거나 확장 업데이트로 끊긴 탭이면
 // chat.js를 다시 주입한 뒤 재시도한다 (탭 새로고침 불필요)
@@ -128,8 +130,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type !== 'send') return;
 
-  chrome.tabs.query({ url: 'https://chzzk.naver.com/live/*' }, (tabs) => {
-    if (tabs && tabs.length > 0) {
+  chrome.tabs.query({ url: 'https://chzzk.naver.com/live/*' }, (allTabs) => {
+    // 지정된 채널의 탭만 대상 (다른 방송 탭에는 절대 보내지 않음)
+    const tabs = (allTabs || []).filter(t => (t.url || '').indexOf(ALLOWED_CHANNEL) !== -1);
+    if (tabs.length > 0) {
       // 채팅 전용 팝업(/chat)이 있으면 우선 사용
       const tab = tabs.find(t => /\/chat(\?|$)/.test(t.url || '')) || tabs[0];
       trySend(tab.id, msg.text, 3, sendResponse);
@@ -147,7 +151,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       });
       return;
     }
-    sendResponse({ ok: false, error: '열려 있는 치지직 탭이 없고 방송 링크도 비어 있어요. 분할기의 치지직 방송 링크를 확인해주세요.' });
+    sendResponse({ ok: false, error: '지정된 방송의 치지직 탭이 없어요. 이 확장은 지정된 친구 방송에서만 작동합니다.' });
   });
   return true; // 비동기 sendResponse 사용
 });
