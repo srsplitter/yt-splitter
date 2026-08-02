@@ -41,9 +41,14 @@ window.addEventListener('message', (ev) => {
     return;
   }
 
-  // 입장 BGM 설정 저장/조회/삭제 중계
-  if (d.type === 'bgm-save' || d.type === 'bgm-get' || d.type === 'bgm-clear') {
-    chrome.runtime.sendMessage({ type: d.type, text: typeof d.text === 'string' ? d.text : '' }, (res) => {
+  // 입장 BGM·게임 명령어 설정 저장/조회/삭제 중계
+  if (d.type === 'bgm-save' || d.type === 'bgm-get' || d.type === 'bgm-clear' || d.type === 'game-save') {
+    chrome.runtime.sendMessage({
+      type: d.type,
+      text: typeof d.text === 'string' ? d.text : '',
+      roulette: !!d.roulette,
+      gacha: !!d.gacha
+    }, (res) => {
       const err = chrome.runtime.lastError;
       window.postMessage(Object.assign({
         source: 'ytsplit-ext',

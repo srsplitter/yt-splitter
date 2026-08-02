@@ -186,6 +186,22 @@
     font-weight: 600;
   }
   #bgmState { font-size: 0.85rem; font-weight: 400; color: #7ee787; }
+  #gameState { font-size: 0.85rem; font-weight: 400; color: #7ee787; }
+  .chk {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.95rem;
+    color: var(--text);
+    margin: 12px 0;
+    cursor: pointer;
+  }
+  .chk input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
   .search-row { display: flex; gap: 8px; }
   .search-row input { flex: 1; }
   .search-row button { margin-top: 0; padding: 12px 20px; }
@@ -214,6 +230,7 @@
   <div class="tabs">
     <button class="tab active" id="tabSplitBtn">링크 분할</button>
     <button class="tab" id="tabBgmBtn">입장 BGM</button>
+    <button class="tab" id="tabGameBtn">게임 명령어</button>
   </div>
 
   <div id="tabSplit">
@@ -290,6 +307,17 @@
         <div><button class="secondary" id="bgmClearBtn">저장된 BGM 삭제</button></div>
       </div>
       <div id="bgmInfo" class="ext-note"></div>
+    </div>
+  </div>
+
+  <div id="tabGame" style="display:none">
+    <div class="card">
+      <h2 class="ext-title">게임 명령어 <span id="gameState"></span></h2>
+      <p class="ext-desc">한국 시간 자정(00:00) 후 <b>첫 직접 채팅</b> 때 자동 전송됩니다. 순서: 입장 BGM(있다면) → !일괄 룰렛 → !일괄 가챠권 · 각 1초 간격. 이 브라우저(확장)에 저장되는 개인 설정이에요.</p>
+      <p class="ext-note" id="gameNeedExt" style="display:none">⚠ 이 기능은 하단의 확장 프로그램을 설치해야 사용할 수 있어요. 설치 후 페이지를 새로고침해 주세요.</p>
+      <label class="chk"><input type="checkbox" id="gameRoulette"> <b>!일괄 룰렛</b> 자동 전송</label>
+      <label class="chk"><input type="checkbox" id="gameGacha"> <b>!일괄 가챠권</b> 자동 전송</label>
+      <div id="gameInfo" class="ext-note"></div>
     </div>
   </div>
 
@@ -477,6 +505,7 @@ window.addEventListener('message', (ev) => {
     extReady = true;
     $('extState').textContent = '— 설치됨 ✓';
     $('bgmNeedExt').style.display = 'none';
+    $('gameNeedExt').style.display = 'none';
     refreshBgmInfo();
     if (lastRender) renderLinks(lastRender.videoId, lastRender.duration, lastRender.interval, lastRender.startSec);
   }
@@ -535,8 +564,8 @@ async function sendAll(links, btn) {
     }
     sent++;
     if (i < links.length - 1 && !batchAbort) {
-      setStatus((i + 1) + '/' + links.length + ' 전송됨 — 채팅 씹힘 방지 5초 대기…');
-      await sleep(5000);
+      setStatus((i + 1) + '/' + links.length + ' 전송됨 — 1초 대기…');
+      await sleep(1000);
     }
   }
   batchRunning = false;
@@ -672,18 +701,21 @@ updateChatBtn();
 function showTab(which) {
   $('tabSplit').style.display = which === 'split' ? 'block' : 'none';
   $('tabBgm').style.display = which === 'bgm' ? 'block' : 'none';
+  $('tabGame').style.display = which === 'game' ? 'block' : 'none';
   $('tabSplitBtn').classList.toggle('active', which === 'split');
   $('tabBgmBtn').classList.toggle('active', which === 'bgm');
+  $('tabGameBtn').classList.toggle('active', which === 'game');
 }
 $('tabSplitBtn').onclick = () => showTab('split');
 $('tabBgmBtn').onclick = () => showTab('bgm');
+$('tabGameBtn').onclick = () => showTab('game');
 
 // ---- 입장 BGM (설정은 확장 저장소에 보관) ----
 let pendingBgm = null;
-function bgmRequest(type, text) {
+function bgmRequest(type, extra) {
   return new Promise((resolve) => {
     pendingBgm = resolve;
-    window.postMessage({ source: 'ytsplit-page', type: type, text: text || '' }, window.location.origin);
+    window.postMessage(Object.assign({ source: 'ytsplit-page', type: type }, extra || {}), window.location.origin);
     setTimeout(() => {
       if (pendingBgm === resolve) { pendingBgm = null; resolve({ ok: false, error: '확장이 응답하지 않아요.' }); }
     }, 5000);
@@ -707,23 +739,44 @@ async function refreshBgmInfo() {
   if (!extReady) return;
   const res = await bgmRequest('bgm-get');
   if (!res.ok) { $('bgmInfo').textContent = 'BGM 정보를 불러오지 못했어요: ' + res.error; return; }
+  const sentToday = res.date === res.today;
   if (res.text) {
     $('bgmState').textContent = '— 설정됨 ✓';
-    $('bgmInfo').textContent = '저장된 명령어: ' + res.text + (res.date === res.today ? '  ·  오늘은 이미 전송됐어요.' : '  ·  오늘 첫 직접 채팅을 기다리는 중.');
+    $('bgmInfo').textContent = '저장된 명령어: ' + res.text + (sentToday ? '  ·  오늘은 이미 전송됐어요.' : '  ·  오늘 첫 직접 채팅을 기다리는 중.');
   } else {
     $('bgmState').textContent = '';
     $('bgmInfo').textContent = '저장된 입장 BGM이 없습니다.';
   }
+  // 게임 명령어 탭 상태
+  $('gameRoulette').checked = !!res.roulette;
+  $('gameGacha').checked = !!res.gacha;
+  const anyGame = res.roulette || res.gacha;
+  $('gameState').textContent = anyGame ? '— 켜짐 ✓' : '';
+  $('gameInfo').textContent = anyGame
+    ? (sentToday ? '오늘은 이미 전송됐어요.' : '오늘 첫 직접 채팅을 기다리는 중.')
+    : '켜둔 게임 명령어가 없습니다.';
 }
 
 $('bgmSaveBtn').onclick = async () => {
   if (!extReady) { $('bgmInfo').textContent = '확장 프로그램을 설치해야 저장할 수 있어요.'; return; }
   const c = bgmCommand();
   if (!c) { $('bgmInfo').textContent = '유튜브 링크를 인식하지 못했어요. 링크를 확인해 주세요.'; return; }
-  const res = await bgmRequest('bgm-save', c);
+  const res = await bgmRequest('bgm-save', { text: c });
   if (res.ok) refreshBgmInfo();
   else $('bgmInfo').textContent = '저장 실패: ' + res.error;
 };
+
+async function saveGameSettings() {
+  if (!extReady) { $('gameInfo').textContent = '확장 프로그램을 설치해야 사용할 수 있어요.'; return; }
+  const res = await bgmRequest('game-save', {
+    roulette: $('gameRoulette').checked,
+    gacha: $('gameGacha').checked
+  });
+  if (res.ok) refreshBgmInfo();
+  else $('gameInfo').textContent = '저장 실패: ' + res.error;
+}
+$('gameRoulette').addEventListener('change', saveGameSettings);
+$('gameGacha').addEventListener('change', saveGameSettings);
 
 $('bgmClearBtn').onclick = async () => {
   if (!extReady) { $('bgmInfo').textContent = '확장 프로그램이 설치되어 있지 않아요.'; return; }
@@ -733,7 +786,12 @@ $('bgmClearBtn').onclick = async () => {
 };
 
 // 확장이 1.5초 안에 인사하지 않으면 설치 안내 표시
-setTimeout(() => { if (!extReady) $('bgmNeedExt').style.display = 'block'; }, 1500);
+setTimeout(() => {
+  if (!extReady) {
+    $('bgmNeedExt').style.display = 'block';
+    $('gameNeedExt').style.display = 'block';
+  }
+}, 1500);
 
 // ---- 유튜브 검색 (확장 경유, API 키 불필요) ----
 let pendingSearch = null;

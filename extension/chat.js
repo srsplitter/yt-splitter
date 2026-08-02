@@ -10,8 +10,12 @@ function isAllowedPage() {
   return location.href.indexOf(ALLOWED_CHANNEL) !== -1;
 }
 
-// 이 확장이 보낼 수 있는 메시지는 노래신청 명령어 형식뿐 (임의 텍스트 전송 차단)
+// 이 확장이 보낼 수 있는 메시지는 노래신청 명령어 형식과 아래 고정 게임 명령어뿐 (임의 텍스트 전송 차단)
 const SAFE_TEXT = /^!sr https:\/\/youtu\.be\/[A-Za-z0-9_-]{11}\?t=\d{1,6}$/;
+const GAME_COMMANDS = ['!일괄 룰렛', '!일괄 가챠권'];
+function isAllowedText(text) {
+  return typeof text === 'string' && (SAFE_TEXT.test(text) || GAME_COMMANDS.indexOf(text) !== -1);
+}
 
 function findChatInput() {
   // 치지직 채팅 입력은 contenteditable 요소(구조 변경 대비 textarea 폴백)
@@ -46,7 +50,7 @@ function doInsertSend(text, done) {
     done({ ok: false, error: '이 확장은 지정된 방송에서만 전송할 수 있어요.' });
     return;
   }
-  if (typeof text !== 'string' || !SAFE_TEXT.test(text)) {
+  if (!isAllowedText(text)) {
     done({ ok: false, error: '허용되지 않는 메시지 형식이에요.' });
     return;
   }
@@ -79,9 +83,23 @@ function doInsertSend(text, done) {
   }
 }
 
+// 사용자가 입력창에 쓰는 중이면 비워질 때까지 기다렸다가 전송 (직접 채팅과 명령어가 섞이는 것 방지)
+function waitIdleThenSend(text, maxWaitMs, done) {
+  const deadline = Date.now() + maxWaitMs;
+  (function poll() {
+    const el = findChatInput();
+    if (el && readText(el).trim() === '') { doInsertSend(text, done); return; }
+    if (Date.now() > deadline) {
+      done({ ok: false, error: '채팅 입력창이 계속 사용 중이라 전송하지 못했어요.' });
+      return;
+    }
+    setTimeout(poll, 400);
+  })();
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || msg.type !== 'insert') return;
-  doInsertSend(msg.text, sendResponse);
+  waitIdleThenSend(msg.text, 8000, sendResponse);
   return true; // 비동기 sendResponse 사용
 });
 
@@ -97,15 +115,28 @@ function isChatInputEl(el) {
 }
 
 function onUserChatted() {
-  if (!isAllowedPage()) return; // 지정된 방송이 아니면 입장 BGM 감지 안 함
-  chrome.storage.local.get(['bgmText', 'bgmDate'], (v) => {
-    if (!v.bgmText || !SAFE_TEXT.test(v.bgmText)) return;
+  if (!isAllowedPage()) return; // 지정된 방송이 아니면 감지 안 함
+  chrome.storage.local.get(['bgmText', 'bgmDate', 'gameRoulette', 'gameGacha'], (v) => {
+    // 전송 순서: 입장 BGM(있다면) → !일괄 룰렛 → !일괄 가챠권
+    const queue = [];
+    if (v.bgmText && SAFE_TEXT.test(v.bgmText)) queue.push(v.bgmText);
+    if (v.gameRoulette) queue.push(GAME_COMMANDS[0]);
+    if (v.gameGacha) queue.push(GAME_COMMANDS[1]);
+    if (queue.length === 0) return;
     const today = kstDate();
     if (v.bgmDate === today) return;
-    // 먼저 날짜를 기록해 중복 전송을 막고, 사용자 메시지가 먼저 나가도록 2초 뒤 전송
+    // 먼저 날짜를 기록해 중복 전송을 막고, 사용자 메시지가 먼저 나가도록 2초 뒤 순차 전송
     chrome.storage.local.set({ bgmDate: today }, () => {
-      setTimeout(() => { doInsertSend(v.bgmText, () => {}); }, 2000);
+      setTimeout(() => sendQueue(queue, 0), 2000);
     });
+  });
+}
+
+// 큐를 1초 간격으로 순차 전송. 입력창이 사용 중이면 비워질 때까지 기다린다
+function sendQueue(queue, idx) {
+  if (idx >= queue.length) return;
+  waitIdleThenSend(queue[idx], 60000, () => {
+    setTimeout(() => sendQueue(queue, idx + 1), 1000);
   });
 }
 
