@@ -287,6 +287,7 @@
       <button id="bgmSaveBtn">입장 BGM 저장</button>
       <div class="row">
         <div><button class="secondary" id="bgmClearBtn">저장된 BGM 삭제</button></div>
+        <div><button class="secondary" id="bgmResetBtn">오늘 전송 기록 초기화 (테스트용)</button></div>
       </div>
       <div id="bgmInfo" class="ext-note"></div>
     </div>
@@ -762,6 +763,17 @@ $('bgmClearBtn').onclick = async () => {
   const res = await bgmRequest('bgm-clear');
   if (res.ok) refreshBgmInfo();
   else $('bgmInfo').textContent = '삭제 실패: ' + res.error;
+};
+
+$('bgmResetBtn').onclick = async () => {
+  if (!extReady) { $('bgmInfo').textContent = '확장 프로그램이 설치되어 있지 않아요.'; return; }
+  const res = await bgmRequest('bgm-reset');
+  if (res.ok) {
+    await refreshBgmInfo();
+    $('bgmInfo').textContent = '오늘 기록을 지웠어요 — 다음 직접 채팅 때 큐가 다시 발동합니다.';
+  } else {
+    $('bgmInfo').textContent = '초기화 실패: ' + res.error;
+  }
 };
 
 // 확장이 1.5초 안에 인사하지 않으면 설치 안내 표시

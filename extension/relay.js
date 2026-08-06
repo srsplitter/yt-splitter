@@ -131,6 +131,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.storage.local.remove(['bgmText', 'bgmDate'], () => sendResponse({ ok: true }));
     return true;
   }
+  if (msg.type === 'bgm-reset') {
+    // 오늘 전송 기록만 지움 — 다음 직접 채팅 때 큐가 다시 발동 (테스트용)
+    chrome.storage.local.remove(['bgmDate'], () => sendResponse({ ok: true }));
+    return true;
+  }
 
   if (msg.type === 'yt-search') {
     // 검색어 검증: 문자·숫자·공백·일반 문장부호만 허용, 100자 제한. 도메인은 youtube.com 고정.
