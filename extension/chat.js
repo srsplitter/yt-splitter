@@ -46,40 +46,43 @@ function clickSendButton() {
 
 // 형식 검증을 통과한 평문을 입력창에 넣고 전송까지 시도한다
 function doInsertSend(text, done) {
+  // 잠금 중에도 확장 자신의 입력은 허용해야 하므로 작업 동안 표시해 둔다
+  selfInserting = true;
+  const finish = (res) => { selfInserting = false; done(res); };
   if (!isAllowedPage()) {
-    done({ ok: false, error: '이 확장은 지정된 방송에서만 전송할 수 있어요.' });
+    finish({ ok: false, error: '이 확장은 지정된 방송에서만 전송할 수 있어요.' });
     return;
   }
   if (!isAllowedText(text)) {
-    done({ ok: false, error: '허용되지 않는 메시지 형식이에요.' });
+    finish({ ok: false, error: '허용되지 않는 메시지 형식이에요.' });
     return;
   }
   const el = findChatInput();
   if (!el) {
-    done({ ok: false, error: '채팅 입력창을 못 찾았어요. 네이버 로그인과 방송 상태를 확인해주세요.' });
+    finish({ ok: false, error: '채팅 입력창을 못 찾았어요. 네이버 로그인과 방송 상태를 확인해주세요.' });
     return;
   }
   try {
     el.focus();
     document.execCommand('insertText', false, text);
     if (readText(el).indexOf(text) === -1) {
-      done({ ok: false, error: '입력창에 글자를 넣지 못했어요. 로그인 상태를 확인해주세요.' });
+      finish({ ok: false, error: '입력창에 글자를 넣지 못했어요. 로그인 상태를 확인해주세요.' });
       return;
     }
     setTimeout(() => {
       pressEnter(el);
       setTimeout(() => {
-        if (readText(el).trim() === '') { done({ ok: true }); return; }
+        if (readText(el).trim() === '') { finish({ ok: true }); return; }
         // Enter가 안 먹으면 전송 버튼 클릭 시도
         clickSendButton();
         setTimeout(() => {
-          if (readText(el).trim() === '') done({ ok: true });
-          else done({ ok: false, error: '입력까지는 됐어요 — 채팅창에서 Enter만 눌러주세요.' });
+          if (readText(el).trim() === '') finish({ ok: true });
+          else finish({ ok: false, error: '입력까지는 됐어요 — 채팅창에서 Enter만 눌러주세요.' });
         }, 400);
       }, 400);
     }, 100);
   } catch (e) {
-    done({ ok: false, error: '오류: ' + e.message });
+    finish({ ok: false, error: '오류: ' + e.message });
   }
 }
 
@@ -145,12 +148,21 @@ function sendQueue(queue, idx) {
   });
 }
 
-// ---- 자동 전송 중 채팅창 키보드 잠금 ----
-// 진짜 사용자 입력(isTrusted)만 차단하므로 확장이 넣는 합성 입력은 그대로 통과한다.
+// ---- 자동 전송 중 채팅창 잠금 ----
+// 키 이벤트 차단만으로는 한글(IME) 입력을 못 막으므로(조합 입력은 취소 불가),
+// 잠금 중에는 입력창의 포커스 자체를 뺏는다. 포커스가 없으면 어떤 입력도 불가능하다.
+// 확장 자신이 명령어를 넣는 동안(selfInserting)만 포커스를 허용한다.
 let inputLocked = false;
 let unlockTimer = null;
+let selfInserting = false;
+function isChatArea(t) {
+  return !!(t && ((t.closest && t.closest('[contenteditable="true"], textarea')) || isChatInputEl(t)));
+}
 function lockInput() {
   inputLocked = true;
+  // 이미 입력창에 포커스가 있으면 바로 뺏는다 (진행 중이던 한글 조합도 종료됨)
+  const ae = document.activeElement;
+  if (isChatArea(ae)) { try { ae.blur(); } catch (e) {} }
   clearTimeout(unlockTimer);
   unlockTimer = setTimeout(unlockInput, 60000); // 안전장치: 어떤 경우에도 60초 뒤 자동 해제
 }
@@ -158,16 +170,20 @@ function unlockInput() {
   inputLocked = false;
   clearTimeout(unlockTimer);
 }
-['keydown', 'keypress', 'beforeinput', 'paste'].forEach((evt) => {
+['keydown', 'keypress', 'beforeinput', 'paste', 'compositionstart', 'mousedown'].forEach((evt) => {
   document.addEventListener(evt, (e) => {
     if (!inputLocked || !e.isTrusted) return;
-    const t = e.target;
-    const inChat = t && ((t.closest && t.closest('[contenteditable="true"], textarea')) || isChatInputEl(t));
-    if (!inChat) return;
+    if (!isChatArea(e.target)) return;
     e.preventDefault();
     e.stopImmediatePropagation();
   }, true);
 });
+// 잠금 중 사용자가 입력창에 포커스를 얻으면 즉시 되뺏는다 (확장 자신의 포커스는 예외)
+document.addEventListener('focusin', (e) => {
+  if (!inputLocked || selfInserting) return;
+  if (!isChatArea(e.target)) return;
+  try { e.target.blur(); } catch (err) {}
+}, true);
 
 document.addEventListener('keydown', (e) => {
   if (!e.isTrusted || e.key !== 'Enter') return;
