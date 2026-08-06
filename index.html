@@ -137,11 +137,10 @@
     border: 1px solid var(--border);
     color: var(--text);
     border-radius: 8px;
-    padding: 9px 14px;
+    padding: 12px 14px;
     font-size: 0.85rem;
     text-decoration: none;
-    display: none;
-    margin-top: 8px;
+    display: inline-block;
     width: fit-content;
   }
   a.secondary:hover { border-color: var(--muted); }
@@ -253,10 +252,9 @@
         <label for="intervalInput">분할 간격 (초)</label>
         <input type="number" id="intervalInput" value="100" min="1">
       </div>
-      <div style="flex:2">
-        <label for="chatUrlInput">치지직 방송 링크 (선택) — 넣으면 복사할 때 채팅창을 앞으로 띄워줘요</label>
-        <input type="text" id="chatUrlInput" placeholder="https://chzzk.naver.com/live/..." value="https://chzzk.naver.com/live/01f531c6d0091b9c606bde1c71e2ead4">
-        <a id="openChatBtn" class="secondary" target="chatWindow">채팅창 열기 ↗</a>
+      <div>
+        <label>친구 방송 채팅창 — 복사하면 자동으로 앞에 떠요</label>
+        <a id="openChatBtn" class="secondary" target="chatWindow" href="https://chzzk.naver.com/live/01f531c6d0091b9c606bde1c71e2ead4/chat">채팅창 열기 ↗</a>
       </div>
     </div>
     <div id="manualBox">
@@ -469,23 +467,9 @@ function setStatus(msg, isError) {
   statusEl.className = isError ? 'error' : '';
 }
 
-// ---- 치지직 채팅 팝업: 방송 링크에서 32자리 hex ID만 추출해 고정 주소의 채팅창 링크를 만든다 ----
+// ---- 친구 방송 채팅 팝업 (채널 고정) ----
+const FRIEND_CHAT_URL = 'https://chzzk.naver.com/live/01f531c6d0091b9c606bde1c71e2ead4/chat';
 let chatOpened = false;
-function chzzkChatUrl(raw) {
-  const m = (raw || '').match(/chzzk\.naver\.com\/live\/([a-f0-9]{32})/);
-  return m ? 'https://chzzk.naver.com/live/' + m[1] + '/chat' : null;
-}
-function updateChatBtn() {
-  const btn = $('openChatBtn');
-  const chat = chzzkChatUrl($('chatUrlInput').value);
-  if (chat) {
-    btn.href = chat;
-    btn.style.display = 'inline-block';
-  } else {
-    btn.style.display = 'none';
-    chatOpened = false;
-  }
-}
 function focusChatWindow() {
   // 이미 열려 있는 이름 붙은 채팅창을 앞으로 가져오기만 한다 (주소 이동 없음)
   if (!chatOpened) return;
@@ -545,7 +529,7 @@ function sendOne(text) {
       source: 'ytsplit-page',
       type: 'send',
       text: text,
-      chatUrl: chzzkChatUrl($('chatUrlInput').value) || ''
+      chatUrl: FRIEND_CHAT_URL
     }, window.location.origin);
     // 탭 자동 열기까지 포함해 넉넉히 대기
     setTimeout(() => {
@@ -704,9 +688,7 @@ $('goBtn').addEventListener('click', async () => {
 
 $('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('goBtn').click(); });
 
-$('chatUrlInput').addEventListener('input', updateChatBtn);
 $('openChatBtn').addEventListener('click', () => { chatOpened = true; });
-updateChatBtn();
 
 // ---- 탭 전환 ----
 function showTab(which) {
