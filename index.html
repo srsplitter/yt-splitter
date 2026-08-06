@@ -313,10 +313,13 @@
   <div id="tabGame" style="display:none">
     <div class="card">
       <h2 class="ext-title">게임 명령어 <span id="gameState"></span></h2>
-      <p class="ext-desc">한국 시간 자정(00:00) 후 <b>첫 직접 채팅</b> 때 자동 전송됩니다. 순서: 입장 BGM(있다면) → !일괄 룰렛 → !일괄 가챠권 · 각 1초 간격. 이 브라우저(확장)에 저장되는 개인 설정이에요.</p>
+      <p class="ext-desc">한국 시간 자정(00:00) 후 <b>첫 직접 채팅</b> 때 자동 전송됩니다. 순서: 입장 BGM(있다면) → !일괄 룰렛 → !일괄 가챠권 → !배율 → !인벤 → !기록 · 각 1초 간격. 전송이 끝날 때까지 채팅창 키보드 입력은 잠시 잠깁니다. 이 브라우저(확장)에 저장되는 개인 설정이에요.</p>
       <p class="ext-note" id="gameNeedExt" style="display:none">⚠ 이 기능은 하단의 확장 프로그램을 설치해야 사용할 수 있어요. 설치 후 페이지를 새로고침해 주세요.</p>
       <label class="chk"><input type="checkbox" id="gameRoulette"> <b>!일괄 룰렛</b> 자동 전송</label>
       <label class="chk"><input type="checkbox" id="gameGacha"> <b>!일괄 가챠권</b> 자동 전송</label>
+      <label class="chk"><input type="checkbox" id="gameMul"> <b>!배율</b> 자동 전송</label>
+      <label class="chk"><input type="checkbox" id="gameInv"> <b>!인벤</b> 자동 전송</label>
+      <label class="chk"><input type="checkbox" id="gameRec"> <b>!기록</b> 자동 전송</label>
       <div id="gameInfo" class="ext-note"></div>
     </div>
   </div>
@@ -514,10 +517,18 @@ window.addEventListener('message', (ev) => {
     pendingResult = null;
     resolve({ ok: !!d.ok, error: d.error || '' });
   }
-  if (d.type === 'bgm-result' && pendingBgm) {
-    const resolve = pendingBgm;
-    pendingBgm = null;
-    resolve(d);
+  if (d.type === 'bgm-result') {
+    let key = d.reqId;
+    if (!key || !bgmPending[key]) {
+      // 구버전 확장은 reqId를 안 돌려주므로 가장 오래된 대기 요청과 짝지음
+      const keys = Object.keys(bgmPending);
+      key = keys.length ? keys[0] : null;
+    }
+    if (key && bgmPending[key]) {
+      const resolve = bgmPending[key];
+      delete bgmPending[key];
+      resolve(d);
+    }
   }
   if (d.type === 'search-result' && pendingSearch) {
     const resolve = pendingSearch;
@@ -711,13 +722,16 @@ $('tabBgmBtn').onclick = () => showTab('bgm');
 $('tabGameBtn').onclick = () => showTab('game');
 
 // ---- 입장 BGM (설정은 확장 저장소에 보관) ----
-let pendingBgm = null;
+// 요청마다 ID를 붙여 응답을 정확한 요청과 짝지음 (연속 클릭 시 응답 뒤섞임 방지)
+let bgmReqSeq = 0;
+const bgmPending = {};
 function bgmRequest(type, extra) {
   return new Promise((resolve) => {
-    pendingBgm = resolve;
-    window.postMessage(Object.assign({ source: 'ytsplit-page', type: type }, extra || {}), window.location.origin);
+    const id = ++bgmReqSeq;
+    bgmPending[id] = resolve;
+    window.postMessage(Object.assign({ source: 'ytsplit-page', type: type, reqId: id }, extra || {}), window.location.origin);
     setTimeout(() => {
-      if (pendingBgm === resolve) { pendingBgm = null; resolve({ ok: false, error: '확장이 응답하지 않아요.' }); }
+      if (bgmPending[id]) { delete bgmPending[id]; resolve({ ok: false, error: '확장이 응답하지 않아요.' }); }
     }, 5000);
   });
 }
@@ -750,7 +764,10 @@ async function refreshBgmInfo() {
   // 게임 명령어 탭 상태
   $('gameRoulette').checked = !!res.roulette;
   $('gameGacha').checked = !!res.gacha;
-  const anyGame = res.roulette || res.gacha;
+  $('gameMul').checked = !!res.mul;
+  $('gameInv').checked = !!res.inv;
+  $('gameRec').checked = !!res.rec;
+  const anyGame = res.roulette || res.gacha || res.mul || res.inv || res.rec;
   $('gameState').textContent = anyGame ? '— 켜짐 ✓' : '';
   $('gameInfo').textContent = anyGame
     ? (sentToday ? '오늘은 이미 전송됐어요.' : '오늘 첫 직접 채팅을 기다리는 중.')
@@ -770,13 +787,17 @@ async function saveGameSettings() {
   if (!extReady) { $('gameInfo').textContent = '확장 프로그램을 설치해야 사용할 수 있어요.'; return; }
   const res = await bgmRequest('game-save', {
     roulette: $('gameRoulette').checked,
-    gacha: $('gameGacha').checked
+    gacha: $('gameGacha').checked,
+    mul: $('gameMul').checked,
+    inv: $('gameInv').checked,
+    rec: $('gameRec').checked
   });
   if (res.ok) refreshBgmInfo();
   else $('gameInfo').textContent = '저장 실패: ' + res.error;
 }
-$('gameRoulette').addEventListener('change', saveGameSettings);
-$('gameGacha').addEventListener('change', saveGameSettings);
+['gameRoulette', 'gameGacha', 'gameMul', 'gameInv', 'gameRec'].forEach((id) => {
+  $(id).addEventListener('change', saveGameSettings);
+});
 
 $('bgmClearBtn').onclick = async () => {
   if (!extReady) { $('bgmInfo').textContent = '확장 프로그램이 설치되어 있지 않아요.'; return; }

@@ -12,7 +12,7 @@ function isAllowedPage() {
 
 // 이 확장이 보낼 수 있는 메시지는 노래신청 명령어 형식과 아래 고정 게임 명령어뿐 (임의 텍스트 전송 차단)
 const SAFE_TEXT = /^!sr https:\/\/youtu\.be\/[A-Za-z0-9_-]{11}\?t=\d{1,6}$/;
-const GAME_COMMANDS = ['!일괄 룰렛', '!일괄 가챠권'];
+const GAME_COMMANDS = ['!일괄 룰렛', '!일괄 가챠권', '!배율', '!인벤', '!기록'];
 function isAllowedText(text) {
   return typeof text === 'string' && (SAFE_TEXT.test(text) || GAME_COMMANDS.indexOf(text) !== -1);
 }
@@ -116,17 +116,22 @@ function isChatInputEl(el) {
 
 function onUserChatted() {
   if (!isAllowedPage()) return; // 지정된 방송이 아니면 감지 안 함
-  chrome.storage.local.get(['bgmText', 'bgmDate', 'gameRoulette', 'gameGacha'], (v) => {
-    // 전송 순서: 입장 BGM(있다면) → !일괄 룰렛 → !일괄 가챠권
+  chrome.storage.local.get(['bgmText', 'bgmDate', 'gameRoulette', 'gameGacha', 'gameMul', 'gameInv', 'gameRec'], (v) => {
+    // 전송 순서: 입장 BGM(있다면) → !일괄 룰렛 → !일괄 가챠권 → !배율 → !인벤 → !기록
     const queue = [];
     if (v.bgmText && SAFE_TEXT.test(v.bgmText)) queue.push(v.bgmText);
-    if (v.gameRoulette) queue.push(GAME_COMMANDS[0]);
-    if (v.gameGacha) queue.push(GAME_COMMANDS[1]);
+    if (v.gameRoulette) queue.push('!일괄 룰렛');
+    if (v.gameGacha) queue.push('!일괄 가챠권');
+    if (v.gameMul) queue.push('!배율');
+    if (v.gameInv) queue.push('!인벤');
+    if (v.gameRec) queue.push('!기록');
     if (queue.length === 0) return;
     const today = kstDate();
     if (v.bgmDate === today) return;
-    // 먼저 날짜를 기록해 중복 전송을 막고, 사용자 메시지가 먼저 나가도록 2초 뒤 순차 전송
+    // 먼저 날짜를 기록해 중복 전송을 막고, 사용자 메시지가 먼저 나가도록 2초 뒤 순차 전송.
+    // 전송이 모두 끝날 때까지 채팅창의 실제 키보드 입력은 잠시 차단된다.
     chrome.storage.local.set({ bgmDate: today }, () => {
+      lockInput();
       setTimeout(() => sendQueue(queue, 0), 2000);
     });
   });
@@ -134,11 +139,35 @@ function onUserChatted() {
 
 // 큐를 1초 간격으로 순차 전송. 입력창이 사용 중이면 비워질 때까지 기다린다
 function sendQueue(queue, idx) {
-  if (idx >= queue.length) return;
+  if (idx >= queue.length) { unlockInput(); return; }
   waitIdleThenSend(queue[idx], 60000, () => {
     setTimeout(() => sendQueue(queue, idx + 1), 1000);
   });
 }
+
+// ---- 자동 전송 중 채팅창 키보드 잠금 ----
+// 진짜 사용자 입력(isTrusted)만 차단하므로 확장이 넣는 합성 입력은 그대로 통과한다.
+let inputLocked = false;
+let unlockTimer = null;
+function lockInput() {
+  inputLocked = true;
+  clearTimeout(unlockTimer);
+  unlockTimer = setTimeout(unlockInput, 60000); // 안전장치: 어떤 경우에도 60초 뒤 자동 해제
+}
+function unlockInput() {
+  inputLocked = false;
+  clearTimeout(unlockTimer);
+}
+['keydown', 'keypress', 'beforeinput', 'paste'].forEach((evt) => {
+  document.addEventListener(evt, (e) => {
+    if (!inputLocked || !e.isTrusted) return;
+    const t = e.target;
+    const inChat = t && ((t.closest && t.closest('[contenteditable="true"], textarea')) || isChatInputEl(t));
+    if (!inChat) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, true);
+});
 
 document.addEventListener('keydown', (e) => {
   if (!e.isTrusted || e.key !== 'Enter') return;

@@ -102,20 +102,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'bgm-get') {
-    chrome.storage.local.get(['bgmText', 'bgmDate', 'gameRoulette', 'gameGacha'], (v) => {
+    chrome.storage.local.get(['bgmText', 'bgmDate', 'gameRoulette', 'gameGacha', 'gameMul', 'gameInv', 'gameRec'], (v) => {
       sendResponse({
         ok: true,
         text: v.bgmText || '',
         date: v.bgmDate || '',
         today: kstDate(),
         roulette: !!v.gameRoulette,
-        gacha: !!v.gameGacha
+        gacha: !!v.gameGacha,
+        mul: !!v.gameMul,
+        inv: !!v.gameInv,
+        rec: !!v.gameRec
       });
     });
     return true;
   }
   if (msg.type === 'game-save') {
-    chrome.storage.local.set({ gameRoulette: !!msg.roulette, gameGacha: !!msg.gacha }, () => sendResponse({ ok: true }));
+    chrome.storage.local.set({
+      gameRoulette: !!msg.roulette,
+      gameGacha: !!msg.gacha,
+      gameMul: !!msg.mul,
+      gameInv: !!msg.inv,
+      gameRec: !!msg.rec
+    }, () => sendResponse({ ok: true }));
     return true;
   }
   if (msg.type === 'bgm-clear') {

@@ -47,13 +47,17 @@ window.addEventListener('message', (ev) => {
       type: d.type,
       text: typeof d.text === 'string' ? d.text : '',
       roulette: !!d.roulette,
-      gacha: !!d.gacha
+      gacha: !!d.gacha,
+      mul: !!d.mul,
+      inv: !!d.inv,
+      rec: !!d.rec
     }, (res) => {
       const err = chrome.runtime.lastError;
       window.postMessage(Object.assign({
         source: 'ytsplit-ext',
         type: 'bgm-result',
         op: d.type,
+        reqId: d.reqId,
         ok: false,
         error: err ? '확장과 연결에 실패했어요.' : '응답 없음'
       }, res || {}), '*');
