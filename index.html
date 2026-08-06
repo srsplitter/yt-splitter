@@ -132,18 +132,6 @@
     width: auto;
   }
   .copy-one:hover { color: var(--text); border-color: var(--muted); }
-  a.secondary {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 8px;
-    padding: 12px 14px;
-    font-size: 0.85rem;
-    text-decoration: none;
-    display: inline-block;
-    width: fit-content;
-  }
-  a.secondary:hover { border-color: var(--muted); }
   .ext-title { font-size: 1.05rem; margin-bottom: 8px; }
   .ext-title span { font-size: 0.85rem; font-weight: 400; color: #7ee787; }
   .ext-desc { font-size: 0.9rem; color: var(--muted); margin-bottom: 14px; }
@@ -251,10 +239,6 @@
       <div>
         <label for="intervalInput">분할 간격 (초)</label>
         <input type="number" id="intervalInput" value="100" min="1">
-      </div>
-      <div>
-        <label>친구 방송 채팅창 — 복사하면 자동으로 앞에 떠요</label>
-        <a id="openChatBtn" class="secondary" target="chatWindow" href="https://chzzk.naver.com/live/01f531c6d0091b9c606bde1c71e2ead4/chat">채팅창 열기 ↗</a>
       </div>
     </div>
     <div id="manualBox">
@@ -467,14 +451,8 @@ function setStatus(msg, isError) {
   statusEl.className = isError ? 'error' : '';
 }
 
-// ---- 친구 방송 채팅 팝업 (채널 고정) ----
+// 확장이 치지직 탭을 스스로 열 때 쓰는 고정 채팅 팝업 주소
 const FRIEND_CHAT_URL = 'https://chzzk.naver.com/live/01f531c6d0091b9c606bde1c71e2ead4/chat';
-let chatOpened = false;
-function focusChatWindow() {
-  // 이미 열려 있는 이름 붙은 채팅창을 앞으로 가져오기만 한다 (주소 이동 없음)
-  if (!chatOpened) return;
-  try { window.open('', 'chatWindow'); } catch (e) {}
-}
 
 // ---- 확장프로그램(완전 자동 전송) 연동 ----
 let extReady = false;
@@ -600,7 +578,6 @@ function renderLinks(videoId, duration, interval, startSec) {
       navigator.clipboard.writeText(line);
       btn.textContent = '✓';
       setTimeout(() => btn.textContent = '복사', 1200);
-      focusChatWindow();
     };
 
     item.append(ts, a, btn);
@@ -688,7 +665,6 @@ $('goBtn').addEventListener('click', async () => {
 
 $('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('goBtn').click(); });
 
-$('openChatBtn').addEventListener('click', () => { chatOpened = true; });
 
 // ---- 탭 전환 ----
 function showTab(which) {
